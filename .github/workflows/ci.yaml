@@ -1,0 +1,231 @@
+name: CI
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+env:
+    NPMRC_FONT_AWESOME_TOKEN: ${{ secrets.NPMRC_FONT_AWESOME_TOKEN }}
+jobs:
+    deploy:
+        name: Deploy to Cloudflare Pages
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            deployments: write
+            issues: write
+            pull-requests: write
+            checks: write
+            statuses: write
+        outputs:
+            deployment_url: ${{ steps.deploy.outputs.deployment-url }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - name: Cache Next.js build
+              uses: actions/cache@v3
+              with:
+                  path: |
+                      ${{ github.workspace }}/.next/cache
+                  # Generate a new cache whenever packages or source files change.
+                  key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lockb') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+                  # If source files changed but packages didn't, rebuild from a prior cache.
+                  restore-keys: |
+                      ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lockb') }}-
+            - name: Sets env vars for production
+              run: |
+                  echo "SENTRY_ENVIRONMENT=production" >> $GITHUB_ENV
+                  echo "GITBOOK_ASSETS_PREFIX=https://static.gitbook.com" >> $GITHUB_ENV
+              if: startsWith(github.ref, 'refs/heads/main')
+            - name: Sets env vars for preview
+              run: |
+                  echo "SENTRY_ENVIRONMENT=preview" >> $GITHUB_ENV
+              if: 1 && !startsWith(github.ref, 'refs/heads/main')
+            - name: Build Next.js with next-on-pages
+              run: bun run build:cloudflare
+              env:
+                  SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+                  SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+                  SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+                  SENTRY_DSN: ${{ vars.SENTRY_DSN }}
+            - id: deploy
+              name: Deploy to Cloudflare
+              uses: cloudflare/wrangler-action@v3.11.0
+              with:
+                  apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+                  workingDirectory: ./
+                  wranglerVersion: '3.82.0'
+                  command: pages deploy ./packages/gitbook/.vercel/output/static --project-name=${{ vars.CLOUDFLARE_PROJECT_NAME }} --branch=${{ github.ref == 'refs/heads/main' && 'main' || format('pr{0}', github.event.pull_request.number) }}
+            - name: Outputs
+              run: |
+                  echo "URL: ${{ steps.deploy.outputs.deployment-url }}"
+                  echo "Alias URL: ${{ steps.deploy.outputs.deployment-alias-url }}"
+            - name: Archive build output
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-output
+                  path: .vercel/
+            # Until https://github.com/cloudflare/wrangler-action/issues/301 is done
+            - name: Update Deployment Status to Success
+              env:
+                  DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+              run: |
+                  curl -X POST \
+                    -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                    -H "Accept: application/vnd.github.v3+json" \
+                    -d '{"state": "success", "target_url": "${{ steps.deploy.outputs.deployment-url }}", "description": "Deployed Preview URL for commit", "context": "cloudflare/preview"}' \
+                    https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}
+
+            - name: Find GitHub Comment
+              uses: peter-evans/find-comment@v3
+              id: fc
+              if: 1 && !startsWith(github.ref, 'refs/heads/main')
+              with:
+                  issue-number: ${{ github.event.pull_request.number }}
+                  comment-author: 'github-actions[bot]'
+                  body-includes: GitBook Preview
+
+            - name: Create or update GitHub comment
+              uses: peter-evans/create-or-update-comment@v4
+              if: 1 && !startsWith(github.ref, 'refs/heads/main')
+              with:
+                  comment-id: ${{ steps.fc.outputs.comment-id }}
+                  issue-number: ${{ github.event.pull_request.number }}
+                  body: |
+                      **GitBook Preview**
+                      Latest commit: [${{ steps.deploy.outputs.deployment-url }}](${{ steps.deploy.outputs.deployment-url }})
+                      PR: [${{ steps.deploy.outputs.deployment-alias-url }}](${{ steps.deploy.outputs.deployment-alias-url }})
+                  edit-mode: replace
+    visual-testing:
+        runs-on: ubuntu-latest
+        name: Visual Testing
+        needs: deploy
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+            - name: Setup Playwright
+              uses: ./.github/actions/setup-playwright
+            - name: Run Playwright tests
+              run: bun e2e
+              env:
+                  BASE_URL: ${{needs.deploy.outputs.deployment_url}}
+                  ARGOS_TOKEN: ${{ secrets.ARGOS_TOKEN }}
+            - uses: actions/upload-artifact@v4
+              if: ${{ !cancelled() }}
+              with:
+                  name: playwright-test-results
+                  path: packages/gitbook/test-results/
+                  retention-days: 3
+    pagespeed-testing:
+        runs-on: ubuntu-latest
+        name: PageSpeed Testing
+        needs: deploy
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - name: Run pagespeed tests
+              run: bun ./packages/gitbook/tests/pagespeed-testing.ts $DEPLOYMENT_URL
+              env:
+                  DEPLOYMENT_URL: ${{needs.deploy.outputs.deployment_url}}
+                  PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+    format:
+        runs-on: ubuntu-latest
+        name: Format
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - run: bun format:check
+    lint:
+        runs-on: ubuntu-latest
+        name: Lint
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - run: bun lint --no-cache
+    test:
+        runs-on: ubuntu-latest
+        name: Test
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - run: bun unit
+    build-oss:
+        # CI to check that the repository builds correctly on a machine without the credentials
+        runs-on: ubuntu-latest
+        name: Build (Open Source)
+        env:
+            NPMRC_FONT_AWESOME_TOKEN: ''
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - run: bun run build
+    typecheck:
+        runs-on: ubuntu-latest
+        name: Typecheck
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: 1.1.18
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+            - run: bun typecheck

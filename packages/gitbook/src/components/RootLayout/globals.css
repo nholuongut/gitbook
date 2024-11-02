@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --scrollbar-width: calc(100vw - 100%);
+
+        --dark-base: 20 20 20;
+        --light-base: 251 252 252;
+
+        --light-1: color-mix(in srgb, rgb(var(--primary-base-600)), rgb(var(--light-base)) 99%);
+        --light-DEFAULT: color-mix(
+            in srgb,
+            rgb(var(--primary-base-700)),
+            rgb(var(--light-base)) 96%
+        );
+        --light-2: color-mix(in srgb, rgb(var(--primary-base-800)), rgb(var(--light-base)) 92%);
+        --light-3: color-mix(in srgb, rgb(var(--primary-base-800)), rgb(var(--light-base)) 88%);
+        --light-4: color-mix(in srgb, rgb(var(--primary-base-800)), rgb(var(--light-base)) 72%);
+
+        --dark-1: color-mix(in srgb, rgb(var(--primary-base-100)), rgb(1 1 1) 96%);
+        --dark-DEFAULT: color-mix(
+            in srgb,
+            rgb(var(--primary-base-300)),
+            rgb(var(--dark-base)) 94.5%
+        );
+        --dark-2: color-mix(in srgb, rgb(var(--primary-base-200)), rgb(var(--dark-base)) 92%);
+        --dark-3: color-mix(in srgb, rgb(var(--primary-base-200)), rgb(25 25 25) 91%);
+        --dark-4: color-mix(in srgb, rgb(var(--primary-base-200)), rgb(var(--dark-base)) 64%);
+        @apply leading-relaxed;
+    }
+    body {
+        @apply text-dark dark:text-light;
+    }
+    html {
+        @apply gutter-stable;
+    }
+    html:is(.plain-background) {
+        --dark-base: 22 22 22;
+        --light-base: 255 255 255;
+        /* reset primaries as greys */
+        --primary-base-50: 239 239 239;
+        --primary-base-100: 222 222 222;
+        --primary-base-200: 200 200 200;
+        --primary-base-300: 180 180 180;
+        --primary-base-400: 150 150 150;
+        --primary-base-500: 120 120 120;
+        --primary-base-600: 90 90 90;
+        --primary-base-700: 70 70 70;
+        --primary-base-800: 30 30 30;
+        --primary-base-900: 19 19 19;
+
+        --light-DEFAULT: color-mix(
+            in srgb,
+            rgb(var(--primary-base-700)),
+            rgb(var(--light-base)) 100%
+        );
+        --light-2: color-mix(in srgb, rgb(var(--primary-base-800)), rgb(var(--light-base)) 96%);
+        --light-3: color-mix(in srgb, rgb(var(--primary-base-800)), rgb(var(--light-base)) 90%);
+        --light-4: color-mix(in srgb, rgb(var(--primary-base-800)), rgb(var(--light-base)) 76%);
+    }
+    h1 {
+        @apply tracking-[-0.025em] text-dark dark:text-light text-balance;
+    }
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        @apply tracking-[-0.0125em] text-dark dark:text-light;
+    }
+
+    a,
+    button,
+    input,
+    textarea {
+        @apply outline-2 outline-primary/6;
+    }
+
+    /*  Light mode */
+    ::-webkit-scrollbar {
+        @apply bg-dark/1;
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        @apply bg-dark/4;
+        border-radius: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        @apply bg-dark/5;
+    }
+
+    /*  Dark mode */
+    .dark ::-webkit-scrollbar {
+        @apply bg-light/1;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+        @apply bg-light/3;
+    }
+
+    .dark ::-webkit-scrollbar-thumb:hover {
+        @apply bg-light/4;
+    }
+
+    /*  Inverted theme light mode */
+    .inverted-theme-scroll::-webkit-scrollbar {
+        @apply bg-transparent;
+    }
+
+    .inverted-theme-scroll::-webkit-scrollbar-thumb {
+        @apply bg-dark/5;
+    }
+
+    .inverted-theme-scroll::-webkit-scrollbar-thumb:hover {
+        @apply bg-dark/6;
+    }
+
+    .flip-heading-hash {
+        @apply [&:is(h1,h2,h3,h4)]:content-start;
+        @apply [&:is(h1,h2,h3,h4)]:[grid-auto-columns:auto_1fr];
+        @apply [&:is(h1,h2,h3,h4)>div:first-child]:[grid-area:1/2];
+        @apply [&:is(h1,h2,h3,h4)>div:first-child]:ml-1;
+    }
+}
+
+@layer utilities {
+    /*  hide scroll bar but still scroll */
+    .hide-scroll::-webkit-scrollbar {
+        display: none;
+    }
+    .hide-scroll {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .linear-mask-gradient {
+        mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 96px, rgba(0, 0, 0, 0));
+    }
+    .linear-mask-util {
+        mask-image: linear-gradient(to bottom, white, white);
+    }
+    .grid-area-1-1 {
+        grid-area: 1/1;
+    }
+    .gutter-stable {
+        scrollbar-gutter: stable;
+    }
+
+    .triangle {
+        position: relative;
+        background-color: orange;
+        text-align: left;
+        transform: rotate(-60deg) skewX(-30deg) scale(1, 0.866);
+    }
+    .triangle:before,
+    .triangle:after {
+        content: '';
+        position: absolute;
+        background-color: inherit;
+    }
+    .triangle,
+    .triangle:before,
+    .triangle:after {
+        width: inherit;
+        height: inherit;
+        border-top-right-radius: 30%;
+    }
+
+    .triangle:before {
+        transform: rotate(-135deg) skewX(-45deg) scale(1.414, 0.707) translate(0, -50%);
+    }
+    .triangle:after {
+        transform: rotate(135deg) skewY(-45deg) scale(0.707, 1.414) translate(50%);
+    }
+
+    .break-anywhere {
+        word-break: break-word;
+    }
+    @supports (overflow-wrap: anywhere) {
+        .break-anywhere {
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+    }
+
+    /**
+     * Utility to prevent horizontal jumps when the vertical scrollbar appears
+     * It should be used on main containers of the layout, while preserving horizontal delimiters.
+     * It basically adds a margin-left with the width of the scrollbar, and a width that compensates for it; when a scrollbar is displayed.
+     * Inspired by https://aykevl.nl/2014/09/fix-jumping-scrollbar, but adapted to work on child elements of "html"
+     */
+    .scroll-nojump {
+        width: 100%;
+    }
+    @media screen and (min-width: 1536px) {
+        .scroll-nojump {
+            margin-left: var(--scrollbar-width);
+            margin-right: 0;
+            width: calc(100% - var(--scrollbar-width));
+        }
+    }
+}
+
+html {
+    color-scheme: light;
+
+    /** Ensure PDF export and print correctly displays the background colors */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+}
+html.dark {
+    color-scheme: dark light;
+}
